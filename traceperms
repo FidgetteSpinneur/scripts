@@ -1,0 +1,115 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use Cwd 'abs_path';
+use File::Basename;
+
+
+{
+    my %files;
+    sub statx {
+        my $path = shift;
+        unless ($files{$path}) {
+            my @stat = stat $path;
+
+            my $uent = (getpwuid $stat[4])[0];
+            my $gent = (getgrgid $stat[5])[0];
+            my $perms = sprintf "%04o" => $stat[2] & 07777;
+
+            $files{$path} = [ $perms, $uent, $gent ];
+        }
+        ( @{$files{$path}}, $path )
+    }
+}
+
+
+{
+    my (@chops, @stdout);
+    sub leafeater {
+        my $ref = shift;
+
+        for (sort keys %$ref) {
+            push @chops, $_;
+
+            my $path = $chops[0] . (join '/', @chops[1..$#chops]);
+            $path .= '/' if -d $path && $path ne '/';
+
+            my $line = [];
+            push @$line, statx $path;
+            unshift @stdout, $line;
+
+            leafeater($ref->{$_});
+        }
+
+        pop @chops;
+        \@stdout;
+}
+}
+
+
+#
+#   '/usr/local/apache' => [ '/', 'usr' 'local', 'apache' ]
+#
+sub chopout {
+    my $path_in = shift;
+    my $path = abs_path $path_in;
+
+    unless ($path) {
+        printf STDERR "! Cannot trace $path_in, maybe a circular dependency?\n";
+        return [];
+    }
+
+    unless (-e $path) {
+        printf STDERR "! Cannot trace $path_in, do you know why?\n";
+        return []
+    }
+
+    print STDERR "! $path_in refers to $path, tracing that instead\n"
+        if -l $path_in;
+
+    my @ret;
+
+    my $leaf = '';
+    while ($leaf ne $path) {
+        $leaf = basename $path;
+        $path = dirname $path;
+
+        unshift @ret, $leaf;
+    };
+
+    \@ret;
+}
+
+
+#
+#   construct the tree, which probably should be explained better
+#
+my %tree;
+my $ref;
+for (@ARGV) {
+    my $ref = \%tree;
+    for (@{chopout $_}) {
+        $ref->{$_} = {} unless $ref->{$_};
+        $ref = $ref->{$_};
+    }
+}
+
+
+my $stdout = leafeater \%tree;
+my @lengths;
+for (@$stdout) {
+    my $k = 0;
+    for (@$_) {
+        my $len = length $_;
+        $lengths[$k] = $len if $len > ($lengths[$k] // 0);
+        $k++;
+    }
+}
+
+for (@$stdout) {
+    my $k;
+    printf "%-$lengths[$k++]s ", $_ for @$_;
+    print "\n";
+}

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# needs BASH for 'echo -en'. sorry.
+
+
+[ $(uname) = 'SunOS' ] && {
+    which() {
+    ksh whence -p $*
+    }
+}
+
+
+which seq &>/dev/null || {
+    which jot &>/dev/null && {
+    seq() {
+        jot - $*
+    }
+    } || {
+    echo "No sequencer found, bailing"
+    exit 1
+    }
+}
+
+
+EMPH='\e[1m'
+RST="\e[m"
+
+echo -e "\n${EMPH}Canonical color names:${RST}\n"
+echo -e "  Black     Red     Green   Yellow    Blue    Magenta   Cyan     White\n"
+
+for i in $(seq 30 37); do
+    for j in $(seq 0 1); do
+    for k in $(seq 40 47); do
+        COL="${j};${i};${k}"
+        echo -en "\e[${COL}m ${COL} "
+    done
+    echo -e $RST
+    done
+done
+
+EXAMPLE="echo -e \e[1;37;42m Hello \e[0m world"
+echo
+echo "Use '\e[\${STR}m' to set color, '\e[0m' to reset. Example:"
+echo
+echo "# $EXAMPLE"
+echo $($EXAMPLE)
+echo
